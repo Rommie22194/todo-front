@@ -1,22 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
-
 import { 
   CheckCircle2, Circle, Trash2, Plus, Clock, Settings, RefreshCw, 
   AlertCircle, Sparkles, Server, Check, X, Search, Edit2, 
-  ArrowUpDown, LogOut, User as UserIcon, Lock, Mail, ArrowRight
+  ArrowUpDown, LogOut, User as UserIcon, Lock, Mail, ArrowRight,
+  ListTodo, Layers, CheckCircle, BarChart2, ShieldCheck
 } from 'lucide-react';
 
-
 const getInitialApiUrl = () => {
-  // Check for Vite environment variables first
   if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-  // Fallback for Create React App or Node environments
   if (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL) {
     return process.env.REACT_APP_API_URL;
   }
-  // Default fallback for local development
   return 'http://localhost:5000';
 };
 
@@ -149,7 +145,6 @@ export default function App() {
       setTodos((prev) => prev.map((t) => (t._id === tempId ? savedTodo : t)));
     } catch (err) {
       console.error('Error saving todo:', err);
-      // Remove temp item on failure
       setTodos((prev) => prev.filter((t) => t._id !== tempId));
     }
   };
@@ -239,94 +234,127 @@ export default function App() {
     });
   }, [todos, filter, searchQuery, sortBy]);
 
+  // UI Helper Statistics
+  const completedCount = useMemo(() => todos.filter(t => t.completed).length, [todos]);
+  const activeCount = todos.length - completedCount;
+  const progressPercentage = todos.length > 0 ? Math.round((completedCount / todos.length) * 100) : 0;
+
+  // Login / Register Screen
   if (!token) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 selection:bg-indigo-500 selection:text-white">
-        
-        {/* Settings button to adjust backend URL if needed */}
+      <div className="relative min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 selection:bg-indigo-500 selection:text-white overflow-hidden">
+        {/* Background Ambient Glows */}
+        <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-violet-600/20 rounded-full blur-3xl pointer-events-none" />
+
+        {/* API Settings Quick Toggle */}
         <button
           onClick={() => setIsSettingsOpen(true)}
           title="API Configuration"
-          className="absolute top-6 right-6 p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition"
+          className="absolute top-6 right-6 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all backdrop-blur-md shadow-lg"
         >
           <Settings className="w-5 h-5" />
         </button>
 
-        <div className="w-full max-w-sm bg-slate-900/80 border border-slate-800 p-8 rounded-3xl shadow-2xl backdrop-blur-sm">
-          <div className="flex justify-center mb-6">
-            <div className="p-3.5 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl shadow-lg shadow-indigo-500/20">
+        <div className="w-full max-w-md bg-slate-900/70 border border-slate-800/80 p-8 rounded-3xl shadow-2xl backdrop-blur-xl relative z-10">
+          <div className="flex flex-col items-center mb-8">
+            <div className="p-4 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl shadow-xl shadow-indigo-500/20 mb-4 ring-1 ring-white/20">
               <Sparkles className="w-8 h-8 text-white" />
             </div>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">TaskFlow</h1>
+            <p className="text-slate-400 text-sm mt-1">
+              {isAuthMode === 'login' ? 'Sign in to access your dashboard' : 'Create a new account to get started'}
+            </p>
           </div>
-          <h1 className="text-2xl font-bold text-center text-white mb-2">
-            TaskFlow
-          </h1>
-          <p className="text-center text-slate-400 text-sm mb-8">
-            {isAuthMode === 'login' ? 'Sign in to sync your tasks securely.' : 'Create an account to get started.'}
-          </p>
+
+          {/* Mode Switcher Tabs */}
+          <div className="grid grid-cols-2 gap-1 p-1 bg-slate-950/80 border border-slate-800 rounded-xl mb-6">
+            <button
+              onClick={() => { setIsAuthMode('login'); setAuthError(''); }}
+              className={`py-2 text-xs font-semibold rounded-lg transition-all ${isAuthMode === 'login' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => { setIsAuthMode('register'); setAuthError(''); }}
+              className={`py-2 text-xs font-semibold rounded-lg transition-all ${isAuthMode === 'register' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              Register
+            </button>
+          </div>
 
           <form onSubmit={handleAuth} className="flex flex-col gap-4">
             {authError && (
-              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-xl flex gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3.5 rounded-xl flex items-center gap-2.5 animate-fadeIn">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                 <span>{authError}</span>
               </div>
             )}
-            <div className="relative">
-              <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="email"
-                required
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="Email address"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/70"
-              />
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-400 pl-1">Email Address</label>
+              <div className="relative">
+                <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
             </div>
-            <div className="relative">
-              <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="password"
-                required
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="Password"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/70"
-              />
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-400 pl-1">Password</label>
+              <div className="relative">
+                <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="password"
+                  required
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                />
+              </div>
             </div>
+
             <button
               type="submit"
               disabled={isAuthLoading}
-              className="mt-2 w-full bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl py-3 text-sm font-medium transition shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              className="mt-3 w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl py-3.5 text-sm font-semibold transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
             >
-              {isAuthLoading ? 'Please wait...' : (isAuthMode === 'login' ? 'Sign In' : 'Create Account')}
-              {!isAuthLoading && <ArrowRight className="w-4 h-4" />}
+              {isAuthLoading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <span>{isAuthMode === 'login' ? 'Sign In to Account' : 'Create Account'}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm">
-            <span className="text-slate-500">
-              {isAuthMode === 'login' ? "Don't have an account? " : "Already have an account? "}
+          <div className="mt-6 pt-5 border-t border-slate-800/80 text-center">
+            <span className="text-xs text-slate-500 flex items-center justify-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Secured with JWT Authentication
             </span>
-            <button
-              onClick={() => setIsAuthMode(isAuthMode === 'login' ? 'register' : 'login')}
-              className="text-indigo-400 hover:text-indigo-300 font-medium transition"
-            >
-              {isAuthMode === 'login' ? 'Sign up' : 'Log in'}
-            </button>
           </div>
         </div>
 
-        {/* Re-use Settings Modal Logic */}
+        {/* API Settings Modal */}
         {isSettingsOpen && (
-          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
-              <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+              <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800">
                 <X className="w-5 h-5" />
               </button>
               <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                 <Server className="w-5 h-5 text-indigo-400" /> API Environment Settings
               </h2>
+              <p className="text-xs text-slate-400 mt-1">Configure backend endpoint URL</p>
               <div className="mt-4 flex flex-col gap-2">
                 <label className="text-xs font-medium text-slate-300">Backend URL</label>
                 <input
@@ -337,8 +365,8 @@ export default function App() {
                 />
               </div>
               <div className="mt-6 flex justify-end gap-2.5">
-                <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800">Cancel</button>
-                <button onClick={() => { setApiUrl(pendingApiUrl); setIsSettingsOpen(false); }} className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Save</button>
+                <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800 font-medium">Cancel</button>
+                <button onClick={() => { setApiUrl(pendingApiUrl); setIsSettingsOpen(false); }} className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/20">Save Configuration</button>
               </div>
             </div>
           </div>
@@ -347,76 +375,137 @@ export default function App() {
     );
   }
 
+  // Dashboard / Todo App Screen
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center py-8 px-4 sm:px-6 selection:bg-indigo-500 selection:text-white">
-      <div className="w-full max-w-2xl flex flex-col gap-6">
+      <div className="w-full max-w-3xl flex flex-col gap-6">
         
-        <header className="flex flex-col gap-4 border-b border-slate-800 pb-5">
+        {/* Header Section */}
+        <header className="flex flex-col gap-5 border-b border-slate-800/80 pb-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-xl shadow-lg shadow-indigo-500/20">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl shadow-lg shadow-indigo-500/20 ring-1 ring-white/10">
                 <Sparkles className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">TaskFlow</h1>
-                <p className="text-xs text-slate-400">Secured with JWT</p>
+                <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">TaskFlow</h1>
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <span className="flex items-center gap-1 text-emerald-400 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Connected
+                  </span>
+                  <span>•</span>
+                  <span>JWT Secured</span>
+                </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <button onClick={() => fetchTodos(apiUrl)} title="Refresh" className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition">
+              <button 
+                onClick={() => fetchTodos(apiUrl)} 
+                title="Refresh tasks" 
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all shadow-sm"
+              >
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
               </button>
-              <button onClick={() => setIsSettingsOpen(true)} title="Settings" className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition">
+              <button 
+                onClick={() => setIsSettingsOpen(true)} 
+                title="API Settings" 
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all shadow-sm"
+              >
                 <Settings className="w-4 h-4" />
               </button>
             </div>
           </div>
-          
-          <div className="flex items-center justify-between text-xs px-3.5 py-2.5 rounded-lg border bg-slate-900/60 backdrop-blur border-slate-800/80">
-            <div className="flex items-center gap-2 text-slate-300">
-              <UserIcon className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Signed in as <strong className="font-medium">{currentUser}</strong></span>
+
+          {/* User Info & Progress Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2 flex items-center justify-between text-xs px-4 py-3 rounded-2xl border bg-slate-900/70 border-slate-800/80 backdrop-blur-sm">
+              <div className="flex items-center gap-2.5 text-slate-300">
+                <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                  <UserIcon className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Logged in as</span>
+                  <span className="font-medium text-slate-200 truncate max-w-[180px] sm:max-w-[220px]">{currentUser}</span>
+                </div>
+              </div>
+              <button 
+                onClick={handleLogout} 
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium transition-all"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout</span>
+              </button>
             </div>
-            <button onClick={handleLogout} className="flex items-center gap-1.5 text-rose-400 hover:text-rose-300 transition">
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Logout</span>
-            </button>
+
+            {/* Quick Stats Pill */}
+            <div className="flex items-center justify-between px-4 py-3 rounded-2xl border bg-slate-900/70 border-slate-800/80 backdrop-blur-sm">
+              <div className="flex items-center gap-2 text-slate-300">
+                <BarChart2 className="w-4 h-4 text-indigo-400" />
+                <span className="text-xs font-medium">Progress</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-16 bg-slate-800 h-2 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-500" 
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-slate-200">{progressPercentage}%</span>
+              </div>
+            </div>
           </div>
         </header>
 
+        {/* New Todo Input Form */}
         <form onSubmit={handleAddTodo} className="relative group">
-          <div className="flex items-center gap-2 p-1.5 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl shadow-black/40 focus-within:border-indigo-500/80 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+          <div className="flex items-center gap-2 p-2 bg-slate-900/90 border border-slate-800/90 rounded-2xl shadow-xl shadow-black/40 focus-within:border-indigo-500/80 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
             <input
               type="text"
               value={newTodoText}
               onChange={(e) => setNewTodoText(e.target.value)}
               placeholder="What needs to be done today?..."
-              className="flex-1 bg-transparent px-4 py-3 text-slate-100 placeholder-slate-500 text-sm focus:outline-none"
+              className="flex-1 bg-transparent px-4 py-2.5 text-slate-100 placeholder-slate-500 text-sm focus:outline-none"
             />
-            <button type="submit" disabled={!newTodoText.trim()} className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm flex items-center gap-2 shadow-md shadow-indigo-600/30 transition disabled:opacity-40 active:scale-95">
-              <Plus className="w-4 h-4" /> <span>Add</span>
+            <button 
+              type="submit" 
+              disabled={!newTodoText.trim()} 
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-sm flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+            >
+              <Plus className="w-4 h-4" /> 
+              <span>Add Task</span>
             </button>
           </div>
         </form>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-          <div className="flex items-center bg-slate-900 border border-slate-800 p-1 rounded-xl text-xs">
+        {/* Controls: Filters, Sorting & Search */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Status Filters */}
+          <div className="flex items-center bg-slate-900/80 border border-slate-800/80 p-1 rounded-xl text-xs backdrop-blur-sm">
             {['all', 'active', 'completed'].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-lg transition font-medium capitalize ${filter === f ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`px-3.5 py-1.5 rounded-lg transition-all font-medium capitalize flex items-center gap-1.5 ${filter === f ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
               >
-                {f}
+                <span>{f}</span>
+                {f === 'all' && <span className="opacity-70 text-[10px]">({todos.length})</span>}
+                {f === 'active' && <span className="opacity-70 text-[10px]">({activeCount})</span>}
+                {f === 'completed' && <span className="opacity-70 text-[10px]">({completedCount})</span>}
               </button>
             ))}
           </div>
 
           <div className="flex items-center gap-2 flex-1 sm:justify-end">
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-700">
-              <ArrowUpDown className="w-3.5 h-3.5 text-indigo-400" />
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-transparent text-slate-200 focus:outline-none cursor-pointer">
+            {/* Sort Dropdown */}
+            <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800/80 rounded-xl px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 transition-all">
+              <ArrowUpDown className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <select 
+                value={sortBy} 
+                onChange={(e) => setSortBy(e.target.value)} 
+                className="bg-transparent text-slate-200 focus:outline-none cursor-pointer pr-1"
+              >
                 <option value="newest" className="bg-slate-900">Newest first</option>
                 <option value="oldest" className="bg-slate-900">Oldest first</option>
                 <option value="az" className="bg-slate-900">A &rarr; Z</option>
@@ -424,19 +513,37 @@ export default function App() {
                 <option value="status" className="bg-slate-900">Pending first</option>
               </select>
             </div>
+
+            {/* Search Input */}
             <div className="relative flex-1 max-w-[210px]">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..." className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500/70" />
+              <input 
+                type="text" 
+                value={searchQuery} 
+                onChange={(e) => setSearchQuery(e.target.value)} 
+                placeholder="Search tasks..." 
+                className="w-full bg-slate-900/80 border border-slate-800/80 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/80 transition-all" 
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           </div>
         </div>
 
+        {/* Task List Section */}
         <div className="flex flex-col gap-2.5">
           {filteredTodos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-4 border border-dashed border-slate-800/80 rounded-2xl bg-slate-900/30 text-center">
-              <CheckCircle2 className="w-7 h-7 text-slate-500 mb-3" />
-              <h3 className="text-sm font-medium text-slate-300">No tasks found</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-xs">Nothing to see here right now.</p>
+            <div className="flex flex-col items-center justify-center py-16 px-4 border border-dashed border-slate-800/80 rounded-3xl bg-slate-900/20 text-center">
+              <div className="p-3 bg-slate-900 rounded-2xl border border-slate-800 mb-3 text-slate-500">
+                <CheckCircle2 className="w-8 h-8" />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-300">No tasks found</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                {searchQuery ? 'Try matching a different keyword' : 'Enjoy your free time or add a new task above.'}
+              </p>
             </div>
           ) : (
             filteredTodos.map((todo) => {
@@ -444,46 +551,104 @@ export default function App() {
               const isEditing = editingId === todo._id;
 
               return (
-                <div key={todo._id} className={`group flex items-start gap-3 p-3.5 rounded-xl border transition-all ${todo.completed ? 'bg-slate-900/40 border-slate-800/50' : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'}`}>
-                  <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                    <button onClick={() => handleToggleTodo(todo)} disabled={isEditing} className="mt-0.5 text-slate-500 hover:text-indigo-400">
-                      {todo.completed ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <Circle className="w-5 h-5" />}
-                    </button>
-                    <div className="flex flex-col gap-1 flex-1">
-                      {isEditing ? (
-                        <div className="flex flex-col gap-1.5">
-                          <input
-                            type="text" autoFocus value={editingText}
-                            onChange={(e) => setEditingText(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveEdit(todo._id);
-                              if (e.key === 'Escape') setEditingId(null);
-                            }}
-                            className="bg-slate-950 border border-indigo-500/70 rounded-lg px-2.5 py-1.5 text-sm text-slate-100 focus:outline-none"
-                          />
-                        </div>
-                      ) : (
-                        <p onDoubleClick={() => !todo.completed && handleStartEdit(todo)} className={`text-sm break-words ${todo.completed ? 'line-through text-slate-500' : 'text-slate-100'}`}>
-                          {todo.text}
-                        </p>
-                      )}
-                      {formattedDate && !isEditing && (
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                          <Clock className="w-3 h-3" /> {formattedDate} {todo.updatedAt && '(edited)'}
-                        </div>
-                      )}
-                    </div>
+                <div 
+                  key={todo._id} 
+                  className={`group relative flex items-start gap-3.5 p-4 rounded-2xl border transition-all duration-200 ${
+                    todo.completed 
+                      ? 'bg-slate-900/30 border-slate-800/50 opacity-75' 
+                      : 'bg-slate-900/80 border-slate-800/90 hover:border-slate-700/90 shadow-md shadow-black/20'
+                  }`}
+                >
+                  {/* Left Active Accent Bar */}
+                  {!todo.completed && (
+                    <div className="absolute left-0 top-3 bottom-3 w-1 bg-gradient-to-b from-indigo-500 to-violet-500 rounded-r-full" />
+                  )}
+
+                  {/* Toggle Checkbox */}
+                  <button 
+                    onClick={() => handleToggleTodo(todo)} 
+                    disabled={isEditing} 
+                    className="mt-0.5 text-slate-500 hover:text-indigo-400 transition-colors shrink-0"
+                  >
+                    {todo.completed ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/10" />
+                    ) : (
+                      <Circle className="w-5 h-5" />
+                    )}
+                  </button>
+
+                  {/* Text / Edit Input */}
+                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    {isEditing ? (
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="text" 
+                          autoFocus 
+                          value={editingText}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveEdit(todo._id);
+                            if (e.key === 'Escape') setEditingId(null);
+                          }}
+                          className="w-full bg-slate-950 border border-indigo-500 rounded-xl px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <span className="text-[10px] text-slate-500">Press Enter to save • Esc to cancel</span>
+                      </div>
+                    ) : (
+                      <p 
+                        onDoubleClick={() => !todo.completed && handleStartEdit(todo)} 
+                        className={`text-sm break-words leading-relaxed select-none ${
+                          todo.completed ? 'line-through text-slate-500' : 'text-slate-100 font-medium'
+                        }`}
+                      >
+                        {todo.text}
+                      </p>
+                    )}
+
+                    {formattedDate && !isEditing && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                        <Clock className="w-3 h-3" /> 
+                        <span>{formattedDate}</span>
+                        {todo.updatedAt && <span className="text-slate-600">(edited)</span>}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1">
+
+                  {/* Item Actions */}
+                  <div className="flex items-center gap-1 shrink-0">
                     {isEditing ? (
                       <>
-                        <button onClick={() => handleSaveEdit(todo._id)} className="p-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded-lg"><Check className="w-4 h-4" /></button>
-                        <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg"><X className="w-4 h-4" /></button>
+                        <button 
+                          onClick={() => handleSaveEdit(todo._id)} 
+                          className="p-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                          title="Save"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => setEditingId(null)} 
+                          className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors"
+                          title="Cancel"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </>
                     ) : (
                       <>
-                        <button onClick={() => handleStartEdit(todo)} className="p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg opacity-80 sm:opacity-0 group-hover:opacity-100"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setDeleteCandidate(todo)} className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg opacity-80 sm:opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4" /></button>
+                        <button 
+                          onClick={() => handleStartEdit(todo)} 
+                          className="p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg opacity-90 sm:opacity-0 group-hover:opacity-100 transition-all"
+                          title="Edit Task"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => setDeleteCandidate(todo)} 
+                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg opacity-90 sm:opacity-0 group-hover:opacity-100 transition-all"
+                          title="Delete Task"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </>
                     )}
                   </div>
@@ -494,28 +659,44 @@ export default function App() {
         </div>
       </div>
 
+      {/* Settings Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 relative">
-            <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-200"><X className="w-5 h-5" /></button>
-            <h2 className="text-lg font-semibold text-white flex items-center gap-2"><Server className="w-5 h-5 text-indigo-400" /> API Settings</h2>
-            <div className="mt-4"><input type="text" value={pendingApiUrl} onChange={(e) => setPendingApiUrl(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-mono" /></div>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+            <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Server className="w-5 h-5 text-indigo-400" /> API Settings
+            </h2>
+            <div className="mt-4">
+              <label className="text-xs font-medium text-slate-400">Endpoint Target</label>
+              <input 
+                type="text" 
+                value={pendingApiUrl} 
+                onChange={(e) => setPendingApiUrl(e.target.value)} 
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500" 
+              />
+            </div>
             <div className="mt-6 flex justify-end gap-2.5">
-              <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800">Cancel</button>
-              <button onClick={() => { setApiUrl(pendingApiUrl); setIsSettingsOpen(false); }} className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium">Save</button>
+              <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800 font-medium">Cancel</button>
+              <button onClick={() => { setApiUrl(pendingApiUrl); setIsSettingsOpen(false); }} className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/20">Save Settings</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
       {deleteCandidate && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6">
-            <h3 className="font-semibold text-white mb-2">Delete Task?</h3>
-            <p className="text-xs text-slate-400 mb-5">Remove "{deleteCandidate.text}"?</p>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <h3 className="font-semibold text-white text-base mb-1">Delete Task?</h3>
+            <p className="text-xs text-slate-400 mb-5 break-words">
+              Are you sure you want to remove "<span className="text-slate-200">{deleteCandidate.text}</span>"?
+            </p>
             <div className="flex justify-end gap-2.5">
-              <button onClick={() => setDeleteCandidate(null)} className="px-3.5 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800">Cancel</button>
-              <button onClick={confirmDelete} className="px-4 py-2 rounded-xl text-xs bg-rose-600 hover:bg-rose-500 text-white">Delete</button>
+              <button onClick={() => setDeleteCandidate(null)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800 font-medium">Cancel</button>
+              <button onClick={confirmDelete} className="px-4 py-2 rounded-xl text-xs bg-rose-600 hover:bg-rose-500 text-white font-medium shadow-md shadow-rose-600/20">Delete Task</button>
             </div>
           </div>
         </div>
