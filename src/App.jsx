@@ -3,7 +3,8 @@ import {
   CheckCircle2, Circle, Trash2, Plus, Clock, Settings, RefreshCw, 
   AlertCircle, Sparkles, Server, Check, X, Search, Edit2, 
   ArrowUpDown, LogOut, User as UserIcon, Lock, Mail, ArrowRight,
-  ListTodo, Layers, CheckCircle, BarChart2, ShieldCheck
+  BarChart3, Tag, Calendar, AlertTriangle, Eye, Filter, ShieldCheck,
+  CheckCheck, PieChart, Layers, ListTodo
 } from 'lucide-react';
 
 const getInitialApiUrl = () => {
@@ -16,11 +17,24 @@ const getInitialApiUrl = () => {
   return 'http://localhost:5000';
 };
 
+const CATEGORIES = [
+  { id: 'work', label: 'Work', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  { id: 'personal', label: 'Personal', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' },
+  { id: 'health', label: 'Health', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' },
+  { id: 'finance', label: 'Finance', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+];
+
+const PRIORITIES = [
+  { id: 'low', label: 'Low', color: 'bg-slate-500/10 text-slate-400 border-slate-500/30' },
+  { id: 'medium', label: 'Medium', color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  { id: 'high', label: 'High', color: 'bg-rose-500/10 text-rose-400 border-rose-500/30' },
+];
+
 export default function App() {
   // Auth State
   const [token, setToken] = useState(localStorage.getItem('taskflow_token') || null);
   const [currentUser, setCurrentUser] = useState(localStorage.getItem('taskflow_user') || null);
-  const [isAuthMode, setIsAuthMode] = useState('login'); // 'login' | 'register'
+  const [isAuthMode, setIsAuthMode] = useState('login'); 
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
@@ -29,16 +43,29 @@ export default function App() {
   // Todo State
   const [todos, setTodos] = useState([]);
   const [newTodoText, setNewTodoText] = useState('');
+  const [newPriority, setNewPriority] = useState('medium');
+  const [newCategory, setNewCategory] = useState('work');
+  const [newDueDate, setNewDueDate] = useState('');
+
+  // Filters & Search State
   const [filter, setFilter] = useState('all'); 
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [priorityFilter, setPriorityFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest'); 
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Modals & Windows State
+  const [activeModalTodo, setActiveModalTodo] = useState(null); // Detail Window Modal
+  const [isStatsOpen, setIsStatsOpen] = useState(false);       // Analytics Window Modal
+  const [deleteCandidate, setDeleteCandidate] = useState(null); // Delete Confirm Window
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);   // Settings Modal
+
+  // Inline Editing State
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState('');
-  const [deleteCandidate, setDeleteCandidate] = useState(null);
 
-  // Settings & Network State
+  // Network State
   const [apiUrl, setApiUrl] = useState(getInitialApiUrl);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pendingApiUrl, setPendingApiUrl] = useState(getInitialApiUrl);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -127,15 +154,30 @@ export default function App() {
     if (!trimmed) return;
 
     const tempId = `local-${Date.now()}`;
-    const newTodo = { _id: tempId, text: trimmed, completed: false, createdAt: new Date().toISOString() };
+    const newTodo = { 
+      _id: tempId, 
+      text: trimmed, 
+      completed: false, 
+      priority: newPriority,
+      category: newCategory,
+      dueDate: newDueDate || null,
+      createdAt: new Date().toISOString() 
+    };
+
     setTodos((prev) => [newTodo, ...prev]);
     setNewTodoText('');
+    setNewDueDate('');
 
     try {
       const response = await fetch(`${apiUrl.replace(/\/$/, '')}/api/todos`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ text: trimmed }),
+        body: JSON.stringify({ 
+          text: trimmed,
+          priority: newPriority,
+          category: newCategory,
+          dueDate: newDueDate || null
+        }),
       });
 
       if (response.status === 401) return handleLogout();
@@ -196,6 +238,7 @@ export default function App() {
     const targetId = deleteCandidate._id;
     setTodos((prev) => prev.filter((t) => t._id !== targetId));
     setDeleteCandidate(null);
+    if (activeModalTodo?._id === targetId) setActiveModalTodo(null);
 
     try {
       const response = await fetch(`${apiUrl.replace(/\/$/, '')}/api/todos/${targetId}`, {
@@ -217,57 +260,58 @@ export default function App() {
     } catch { return ''; }
   };
 
+  // Filter & Sort Logic
   const filteredTodos = useMemo(() => {
     const result = todos.filter((todo) => {
-      const matchesFilter = filter === 'all' ? true : filter === 'active' ? !todo.completed : todo.completed;
+      const matchesStatus = filter === 'all' ? true : filter === 'active' ? !todo.completed : todo.completed;
+      const matchesCategory = categoryFilter === 'all' ? true : todo.category === categoryFilter;
+      const matchesPriority = priorityFilter === 'all' ? true : todo.priority === priorityFilter;
       const matchesSearch = todo.text.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesFilter && matchesSearch;
+      return matchesStatus && matchesCategory && matchesPriority && matchesSearch;
     });
 
     return [...result].sort((a, b) => {
       if (sortBy === 'newest') return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
       if (sortBy === 'oldest') return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      if (sortBy === 'priority') {
+        const pOrder = { high: 3, medium: 2, low: 1 };
+        return (pOrder[b.priority || 'medium'] || 0) - (pOrder[a.priority || 'medium'] || 0);
+      }
       if (sortBy === 'az') return a.text.localeCompare(b.text, undefined, { sensitivity: 'base' });
-      if (sortBy === 'za') return b.text.localeCompare(a.text, undefined, { sensitivity: 'base' });
-      if (sortBy === 'status') return Number(a.completed) - Number(b.completed);
       return 0;
     });
-  }, [todos, filter, searchQuery, sortBy]);
+  }, [todos, filter, categoryFilter, priorityFilter, searchQuery, sortBy]);
 
-  // UI Helper Statistics
+  // Statistics Calculation
   const completedCount = useMemo(() => todos.filter(t => t.completed).length, [todos]);
   const activeCount = todos.length - completedCount;
+  const highPriorityCount = useMemo(() => todos.filter(t => !t.completed && t.priority === 'high').length, [todos]);
   const progressPercentage = todos.length > 0 ? Math.round((completedCount / todos.length) * 100) : 0;
 
-  // Login / Register Screen
+  // Unauthenticated Screen
   if (!token) {
     return (
       <div className="relative min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 selection:bg-indigo-500 selection:text-white overflow-hidden">
-        {/* Background Ambient Glows */}
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-violet-600/20 rounded-full blur-3xl pointer-events-none" />
 
-        {/* API Settings Quick Toggle */}
         <button
           onClick={() => setIsSettingsOpen(true)}
           title="API Configuration"
-          className="absolute top-6 right-6 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all backdrop-blur-md shadow-lg"
+          className="absolute top-6 right-6 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-white transition-all backdrop-blur-md shadow-lg"
         >
           <Settings className="w-5 h-5" />
         </button>
 
-        <div className="w-full max-w-md bg-slate-900/70 border border-slate-800/80 p-8 rounded-3xl shadow-2xl backdrop-blur-xl relative z-10">
+        <div className="w-full max-w-md bg-slate-900/80 border border-slate-800/80 p-8 rounded-3xl shadow-2xl backdrop-blur-xl relative z-10">
           <div className="flex flex-col items-center mb-8">
             <div className="p-4 bg-gradient-to-tr from-indigo-600 to-violet-500 rounded-2xl shadow-xl shadow-indigo-500/20 mb-4 ring-1 ring-white/20">
               <Sparkles className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">TaskFlow</h1>
-            <p className="text-slate-400 text-sm mt-1">
-              {isAuthMode === 'login' ? 'Sign in to access your dashboard' : 'Create a new account to get started'}
-            </p>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">TaskFlow Pro</h1>
+            <p className="text-slate-400 text-xs mt-1">Smart Task & Productivity Dashboard</p>
           </div>
 
-          {/* Mode Switcher Tabs */}
           <div className="grid grid-cols-2 gap-1 p-1 bg-slate-950/80 border border-slate-800 rounded-xl mb-6">
             <button
               onClick={() => { setIsAuthMode('login'); setAuthError(''); }}
@@ -285,8 +329,8 @@ export default function App() {
 
           <form onSubmit={handleAuth} className="flex flex-col gap-4">
             {authError && (
-              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3.5 rounded-xl flex items-center gap-2.5 animate-fadeIn">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3.5 rounded-xl flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{authError}</span>
               </div>
             )}
@@ -301,7 +345,7 @@ export default function App() {
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
                   placeholder="name@example.com"
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-all"
                 />
               </div>
             </div>
@@ -316,7 +360,7 @@ export default function App() {
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-all"
                 />
               </div>
             </div>
@@ -324,63 +368,26 @@ export default function App() {
             <button
               type="submit"
               disabled={isAuthLoading}
-              className="mt-3 w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl py-3.5 text-sm font-semibold transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
+              className="mt-3 w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl py-3.5 text-sm font-semibold transition-all shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2"
             >
-              {isAuthLoading ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
+              {isAuthLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : (
                 <>
-                  <span>{isAuthMode === 'login' ? 'Sign In to Account' : 'Create Account'}</span>
+                  <span>{isAuthMode === 'login' ? 'Sign In' : 'Create Account'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
-
-          <div className="mt-6 pt-5 border-t border-slate-800/80 text-center">
-            <span className="text-xs text-slate-500 flex items-center justify-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Secured with JWT Authentication
-            </span>
-          </div>
         </div>
-
-        {/* API Settings Modal */}
-        {isSettingsOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
-              <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800">
-                <X className="w-5 h-5" />
-              </button>
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <Server className="w-5 h-5 text-indigo-400" /> API Environment Settings
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">Configure backend endpoint URL</p>
-              <div className="mt-4 flex flex-col gap-2">
-                <label className="text-xs font-medium text-slate-300">Backend URL</label>
-                <input
-                  type="text"
-                  value={pendingApiUrl}
-                  onChange={(e) => setPendingApiUrl(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
-                />
-              </div>
-              <div className="mt-6 flex justify-end gap-2.5">
-                <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800 font-medium">Cancel</button>
-                <button onClick={() => { setApiUrl(pendingApiUrl); setIsSettingsOpen(false); }} className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/20">Save Configuration</button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
 
-  // Dashboard / Todo App Screen
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center py-8 px-4 sm:px-6 selection:bg-indigo-500 selection:text-white">
-      <div className="w-full max-w-3xl flex flex-col gap-6">
+      <div className="w-full max-w-4xl flex flex-col gap-6">
         
-        {/* Header Section */}
+        {/* Navigation & Header */}
         <header className="flex flex-col gap-5 border-b border-slate-800/80 pb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3.5">
@@ -388,90 +395,120 @@ export default function App() {
                 <Sparkles className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">TaskFlow</h1>
+                <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">TaskFlow Pro</h1>
                 <div className="flex items-center gap-2 text-xs text-slate-400">
                   <span className="flex items-center gap-1 text-emerald-400 font-medium">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Connected
+                    System Active
                   </span>
                   <span>•</span>
-                  <span>JWT Secured</span>
+                  <span>JWT Encrypted</span>
                 </div>
               </div>
             </div>
 
+            {/* Quick Action Window Buttons */}
             <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setIsStatsOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-600/20 text-xs font-semibold transition-all"
+              >
+                <BarChart3 className="w-4 h-4" />
+                <span className="hidden sm:inline">Analytics</span>
+              </button>
               <button 
                 onClick={() => fetchTodos(apiUrl)} 
                 title="Refresh tasks" 
-                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all shadow-sm"
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all"
               >
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
               </button>
               <button 
                 onClick={() => setIsSettingsOpen(true)} 
                 title="API Settings" 
-                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all shadow-sm"
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-all"
               >
                 <Settings className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* User Info & Progress Bar */}
+          {/* User Profile & Priority Alerts Banner */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2 flex items-center justify-between text-xs px-4 py-3 rounded-2xl border bg-slate-900/70 border-slate-800/80 backdrop-blur-sm">
+            <div className="sm:col-span-2 flex items-center justify-between text-xs px-4 py-3 rounded-2xl border bg-slate-900/70 border-slate-800/80">
               <div className="flex items-center gap-2.5 text-slate-300">
                 <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
                   <UserIcon className="w-4 h-4" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Logged in as</span>
-                  <span className="font-medium text-slate-200 truncate max-w-[180px] sm:max-w-[220px]">{currentUser}</span>
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">User Session</span>
+                  <span className="font-medium text-slate-200 truncate max-w-[200px]">{currentUser}</span>
                 </div>
               </div>
-              <button 
-                onClick={handleLogout} 
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium transition-all"
-              >
-                <LogOut className="w-3.5 h-3.5" />
+              <button onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium transition-all">
+                <LogOut className="w-3 h-3.5" />
                 <span>Logout</span>
               </button>
             </div>
 
-            {/* Quick Stats Pill */}
-            <div className="flex items-center justify-between px-4 py-3 rounded-2xl border bg-slate-900/70 border-slate-800/80 backdrop-blur-sm">
-              <div className="flex items-center gap-2 text-slate-300">
-                <BarChart2 className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-medium">Progress</span>
+            <div className="flex items-center justify-between px-4 py-3 rounded-2xl border bg-slate-900/70 border-slate-800/80">
+              <div className="flex items-center gap-2 text-rose-400">
+                <AlertTriangle className="w-4 h-4" />
+                <span className="text-xs font-medium">High Priority</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-16 bg-slate-800 h-2 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-500" 
-                    style={{ width: `${progressPercentage}%` }}
-                  />
-                </div>
-                <span className="text-xs font-bold text-slate-200">{progressPercentage}%</span>
-              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                {highPriorityCount} Pending
+              </span>
             </div>
           </div>
         </header>
 
-        {/* New Todo Input Form */}
-        <form onSubmit={handleAddTodo} className="relative group">
-          <div className="flex items-center gap-2 p-2 bg-slate-900/90 border border-slate-800/90 rounded-2xl shadow-xl shadow-black/40 focus-within:border-indigo-500/80 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+        {/* Enhanced Form: Add Task with Priority, Category & Due Date */}
+        <form onSubmit={handleAddTodo} className="flex flex-col gap-3 p-4 bg-slate-900/90 border border-slate-800/90 rounded-3xl shadow-xl">
+          <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 rounded-2xl px-4 py-1 focus-within:border-indigo-500 transition-all">
             <input
               type="text"
               value={newTodoText}
               onChange={(e) => setNewTodoText(e.target.value)}
-              placeholder="What needs to be done today?..."
-              className="flex-1 bg-transparent px-4 py-2.5 text-slate-100 placeholder-slate-500 text-sm focus:outline-none"
+              placeholder="Add a new task..."
+              className="flex-1 bg-transparent py-3 text-slate-100 placeholder-slate-500 text-sm focus:outline-none"
             />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-2.5 text-xs">
+              {/* Category Dropdown */}
+              <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-slate-300">
+                <Tag className="w-3.5 h-3.5 text-indigo-400" />
+                <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="bg-transparent text-slate-200 focus:outline-none">
+                  {CATEGORIES.map(c => <option key={c.id} value={c.id} className="bg-slate-900">{c.label}</option>)}
+                </select>
+              </div>
+
+              {/* Priority Selector */}
+              <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-slate-300">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                <select value={newPriority} onChange={(e) => setNewPriority(e.target.value)} className="bg-transparent text-slate-200 focus:outline-none">
+                  {PRIORITIES.map(p => <option key={p.id} value={p.id} className="bg-slate-900">{p.label} Priority</option>)}
+                </select>
+              </div>
+
+              {/* Due Date Picker */}
+              <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-slate-300">
+                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                <input 
+                  type="date" 
+                  value={newDueDate} 
+                  onChange={(e) => setNewDueDate(e.target.value)} 
+                  className="bg-transparent text-slate-200 focus:outline-none text-xs"
+                />
+              </div>
+            </div>
+
             <button 
               type="submit" 
               disabled={!newTodoText.trim()} 
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-sm flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-sm flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all disabled:opacity-40"
             >
               <Plus className="w-4 h-4" /> 
               <span>Add Task</span>
@@ -479,178 +516,106 @@ export default function App() {
           </div>
         </form>
 
-        {/* Controls: Filters, Sorting & Search */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* Status Filters */}
-          <div className="flex items-center bg-slate-900/80 border border-slate-800/80 p-1 rounded-xl text-xs backdrop-blur-sm">
+        {/* Filter Controls Bar */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
             {['all', 'active', 'completed'].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-3.5 py-1.5 rounded-lg transition-all font-medium capitalize flex items-center gap-1.5 ${filter === f ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold capitalize transition-all ${filter === f ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200'}`}
               >
-                <span>{f}</span>
-                {f === 'all' && <span className="opacity-70 text-[10px]">({todos.length})</span>}
-                {f === 'active' && <span className="opacity-70 text-[10px]">({activeCount})</span>}
-                {f === 'completed' && <span className="opacity-70 text-[10px]">({completedCount})</span>}
+                {f}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-2 flex-1 sm:justify-end">
-            {/* Sort Dropdown */}
-            <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800/80 rounded-xl px-3 py-1.5 text-xs text-slate-300 hover:border-slate-700 transition-all">
-              <ArrowUpDown className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <select 
-                value={sortBy} 
-                onChange={(e) => setSortBy(e.target.value)} 
-                className="bg-transparent text-slate-200 focus:outline-none cursor-pointer pr-1"
-              >
-                <option value="newest" className="bg-slate-900">Newest first</option>
-                <option value="oldest" className="bg-slate-900">Oldest first</option>
-                <option value="az" className="bg-slate-900">A &rarr; Z</option>
-                <option value="za" className="bg-slate-900">Z &rarr; A</option>
-                <option value="status" className="bg-slate-900">Pending first</option>
+          {/* Search & Sort Controls */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300">
+              <Filter className="w-3.5 h-3.5 text-indigo-400" />
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="bg-transparent focus:outline-none">
+                <option value="all" className="bg-slate-900">All Categories</option>
+                {CATEGORIES.map(c => <option key={c.id} value={c.id} className="bg-slate-900">{c.label}</option>)}
               </select>
             </div>
 
-            {/* Search Input */}
-            <div className="relative flex-1 max-w-[210px]">
+            <div className="relative flex-1 max-w-[200px]">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input 
                 type="text" 
                 value={searchQuery} 
                 onChange={(e) => setSearchQuery(e.target.value)} 
-                placeholder="Search tasks..." 
-                className="w-full bg-slate-900/80 border border-slate-800/80 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/80 transition-all" 
+                placeholder="Search..." 
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500" 
               />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
-                  <X className="w-3 h-3" />
-                </button>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Task List Section */}
+        {/* Task Cards List */}
         <div className="flex flex-col gap-2.5">
           {filteredTodos.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-4 border border-dashed border-slate-800/80 rounded-3xl bg-slate-900/20 text-center">
-              <div className="p-3 bg-slate-900 rounded-2xl border border-slate-800 mb-3 text-slate-500">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
+            <div className="flex flex-col items-center justify-center py-16 border border-dashed border-slate-800 rounded-3xl bg-slate-900/20 text-center">
+              <CheckCircle2 className="w-10 h-10 text-slate-600 mb-2" />
               <h3 className="text-sm font-semibold text-slate-300">No tasks found</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-xs">
-                {searchQuery ? 'Try matching a different keyword' : 'Enjoy your free time or add a new task above.'}
-              </p>
+              <p className="text-xs text-slate-500 mt-1">Create a new task to get started.</p>
             </div>
           ) : (
             filteredTodos.map((todo) => {
-              const formattedDate = formatDateTime(todo.createdAt || todo.timestamp);
-              const isEditing = editingId === todo._id;
+              const formattedDate = formatDateTime(todo.createdAt);
+              const categoryObj = CATEGORIES.find(c => c.id === todo.category) || CATEGORIES[0];
+              const priorityObj = PRIORITIES.find(p => p.id === todo.priority) || PRIORITIES[1];
 
               return (
                 <div 
                   key={todo._id} 
-                  className={`group relative flex items-start gap-3.5 p-4 rounded-2xl border transition-all duration-200 ${
-                    todo.completed 
-                      ? 'bg-slate-900/30 border-slate-800/50 opacity-75' 
-                      : 'bg-slate-900/80 border-slate-800/90 hover:border-slate-700/90 shadow-md shadow-black/20'
+                  className={`group relative flex items-center justify-between gap-3.5 p-4 rounded-2xl border transition-all ${
+                    todo.completed ? 'bg-slate-900/30 border-slate-800/40 opacity-70' : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 shadow-sm'
                   }`}
                 >
-                  {/* Left Active Accent Bar */}
-                  {!todo.completed && (
-                    <div className="absolute left-0 top-3 bottom-3 w-1 bg-gradient-to-b from-indigo-500 to-violet-500 rounded-r-full" />
-                  )}
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                    <button onClick={() => handleToggleTodo(todo)} className="text-slate-500 hover:text-indigo-400 shrink-0">
+                      {todo.completed ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <Circle className="w-5 h-5" />}
+                    </button>
 
-                  {/* Toggle Checkbox */}
-                  <button 
-                    onClick={() => handleToggleTodo(todo)} 
-                    disabled={isEditing} 
-                    className="mt-0.5 text-slate-500 hover:text-indigo-400 transition-colors shrink-0"
-                  >
-                    {todo.completed ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400 fill-emerald-400/10" />
-                    ) : (
-                      <Circle className="w-5 h-5" />
-                    )}
-                  </button>
-
-                  {/* Text / Edit Input */}
-                  <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                    {isEditing ? (
-                      <div className="flex flex-col gap-2">
-                        <input
-                          type="text" 
-                          autoFocus 
-                          value={editingText}
-                          onChange={(e) => setEditingText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveEdit(todo._id);
-                            if (e.key === 'Escape') setEditingId(null);
-                          }}
-                          className="w-full bg-slate-950 border border-indigo-500 rounded-xl px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                        <span className="text-[10px] text-slate-500">Press Enter to save • Esc to cancel</span>
-                      </div>
-                    ) : (
-                      <p 
-                        onDoubleClick={() => !todo.completed && handleStartEdit(todo)} 
-                        className={`text-sm break-words leading-relaxed select-none ${
-                          todo.completed ? 'line-through text-slate-500' : 'text-slate-100 font-medium'
-                        }`}
-                      >
+                    <div className="flex flex-col gap-1 min-w-0 flex-1">
+                      <p className={`text-sm break-words font-medium ${todo.completed ? 'line-through text-slate-500' : 'text-slate-100'}`}>
                         {todo.text}
                       </p>
-                    )}
 
-                    {formattedDate && !isEditing && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                        <Clock className="w-3 h-3" /> 
-                        <span>{formattedDate}</span>
-                        {todo.updatedAt && <span className="text-slate-600">(edited)</span>}
+                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className={`px-2 py-0.5 rounded-md border font-medium ${categoryObj.color}`}>
+                          {categoryObj.label}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-md border font-medium ${priorityObj.color}`}>
+                          {priorityObj.label}
+                        </span>
+                        {todo.dueDate && (
+                          <span className="text-slate-400 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-emerald-400" /> {todo.dueDate}
+                          </span>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
 
-                  {/* Item Actions */}
+                  {/* Task Card Action Buttons */}
                   <div className="flex items-center gap-1 shrink-0">
-                    {isEditing ? (
-                      <>
-                        <button 
-                          onClick={() => handleSaveEdit(todo._id)} 
-                          className="p-1.5 text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors"
-                          title="Save"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => setEditingId(null)} 
-                          className="p-1.5 text-slate-400 hover:bg-slate-800 rounded-lg transition-colors"
-                          title="Cancel"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button 
-                          onClick={() => handleStartEdit(todo)} 
-                          className="p-1.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg opacity-90 sm:opacity-0 group-hover:opacity-100 transition-all"
-                          title="Edit Task"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button 
-                          onClick={() => setDeleteCandidate(todo)} 
-                          className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg opacity-90 sm:opacity-0 group-hover:opacity-100 transition-all"
-                          title="Delete Task"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
+                    <button 
+                      onClick={() => setActiveModalTodo(todo)} 
+                      className="p-2 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-xl transition-all"
+                      title="View Details Window"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => setDeleteCandidate(todo)} 
+                      className="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-xl transition-all"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               );
@@ -659,44 +624,120 @@ export default function App() {
         </div>
       </div>
 
-      {/* Settings Modal */}
-      {isSettingsOpen && (
+      {/* WINDOW 1: Task Detail & View Modal */}
+      {activeModalTodo && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
-            <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 p-1 rounded-lg hover:bg-slate-800">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
+            <button onClick={() => setActiveModalTodo(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-slate-800">
               <X className="w-5 h-5" />
             </button>
-            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-              <Server className="w-5 h-5 text-indigo-400" /> API Settings
-            </h2>
-            <div className="mt-4">
-              <label className="text-xs font-medium text-slate-400">Endpoint Target</label>
-              <input 
-                type="text" 
-                value={pendingApiUrl} 
-                onChange={(e) => setPendingApiUrl(e.target.value)} 
-                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-indigo-500" 
-              />
+            <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider mb-2">
+              <ListTodo className="w-4 h-4" /> Task Details Window
             </div>
-            <div className="mt-6 flex justify-end gap-2.5">
-              <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800 font-medium">Cancel</button>
-              <button onClick={() => { setApiUrl(pendingApiUrl); setIsSettingsOpen(false); }} className="px-4 py-2 rounded-xl text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-md shadow-indigo-600/20">Save Settings</button>
+            <h3 className="text-lg font-bold text-white mb-4">{activeModalTodo.text}</h3>
+
+            <div className="space-y-3 bg-slate-950 p-4 rounded-2xl border border-slate-800/80 text-xs">
+              <div className="flex justify-between items-center py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Status</span>
+                <span className={`font-semibold ${activeModalTodo.completed ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {activeModalTodo.completed ? 'Completed' : 'Pending'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Priority Level</span>
+                <span className="capitalize font-semibold text-slate-200">{activeModalTodo.priority || 'Medium'}</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-slate-800/60">
+                <span className="text-slate-400">Category</span>
+                <span className="capitalize font-semibold text-slate-200">{activeModalTodo.category || 'Work'}</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-400">Created At</span>
+                <span className="text-slate-300 font-mono">{formatDateTime(activeModalTodo.createdAt)}</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={() => handleToggleTodo(activeModalTodo)} className="px-4 py-2 rounded-xl text-xs bg-indigo-600 text-white font-medium hover:bg-indigo-500">
+                Toggle Status
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* WINDOW 2: Analytics & Stats Dashboard Modal */}
+      {isStatsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl relative">
+            <button onClick={() => setIsStatsOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-slate-800">
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2 text-indigo-400 text-xs font-bold uppercase tracking-wider mb-1">
+              <BarChart3 className="w-4 h-4" /> Analytics Window
+            </div>
+            <h2 className="text-xl font-extrabold text-white mb-6">Task Statistics</h2>
+
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                <span className="text-xs text-slate-400">Total Tasks</span>
+                <p className="text-2xl font-black text-white mt-1">{todos.length}</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                <span className="text-xs text-slate-400">Completion Rate</span>
+                <p className="text-2xl font-black text-emerald-400 mt-1">{progressPercentage}%</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-300">
+                <span>Active Pending Tasks</span>
+                <span className="font-bold">{activeCount}</span>
+              </div>
+              <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                <div className="bg-indigo-500 h-full" style={{ width: `${100 - progressPercentage}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WINDOW 3: Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
+            <button onClick={() => setIsSettingsOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-xl hover:bg-slate-800">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+              <Server className="w-5 h-5 text-indigo-400" /> API Settings
+            </h2>
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400">Backend Endpoint</label>
+              <input 
+                type="text" 
+                value={pendingApiUrl} 
+                onChange={(e) => setPendingApiUrl(e.target.value)} 
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 font-mono focus:outline-none" 
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={() => setIsSettingsOpen(false)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800 font-medium">Cancel</button>
+              <button onClick={() => { setApiUrl(pendingApiUrl); setIsSettingsOpen(false); }} className="px-4 py-2 rounded-xl text-xs bg-indigo-600 text-white font-medium">Save Settings</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WINDOW 4: Confirm Delete Modal */}
       {deleteCandidate && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl">
-            <h3 className="font-semibold text-white text-base mb-1">Delete Task?</h3>
-            <p className="text-xs text-slate-400 mb-5 break-words">
-              Are you sure you want to remove "<span className="text-slate-200">{deleteCandidate.text}</span>"?
-            </p>
-            <div className="flex justify-end gap-2.5">
-              <button onClick={() => setDeleteCandidate(null)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800 font-medium">Cancel</button>
-              <button onClick={confirmDelete} className="px-4 py-2 rounded-xl text-xs bg-rose-600 hover:bg-rose-500 text-white font-medium shadow-md shadow-rose-600/20">Delete Task</button>
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+            <h3 className="font-semibold text-white text-base mb-1">Confirm Delete</h3>
+            <p className="text-xs text-slate-400 mb-5">Remove "{deleteCandidate.text}"?</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeleteCandidate(null)} className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:bg-slate-800">Cancel</button>
+              <button onClick={confirmDelete} className="px-4 py-2 rounded-xl text-xs bg-rose-600 text-white font-medium">Delete</button>
             </div>
           </div>
         </div>
